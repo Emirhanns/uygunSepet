@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1051361513755",
+    "project_id": "market-cee15",
+    "storage_bucket": "market-cee15.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1051361513755:android:3e33e99b5717a9dacc43be",
+        "android_client_info": {
+          "package_name": "com.example.market"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAA4IK4MV529DYbFxhIPlR9XNZ95zyd5W4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
