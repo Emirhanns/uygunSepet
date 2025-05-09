@@ -7,6 +7,7 @@ import 'siparis_sayfasi.dart';
 import 'sepet_sayfasi.dart';
 import 'yetkili_giris.dart';
 import 'musteri_urun_listesi.dart';
+import 'package:lottie/lottie.dart';
 
 class BarkodOkuyucu extends StatefulWidget {
   const BarkodOkuyucu({super.key});
@@ -99,7 +100,7 @@ class _BarkodOkuyucuState extends State<BarkodOkuyucu> {
     await showDialog(
       context: context,
       builder: (context) {
-        final ad = urun['ürün-adi'] ?? 'Bilinmiyor';
+        final ad = urun['urunAdi'] ?? 'Bilinmiyor';
         final marka = urun['marka'] ?? 'Bilinmiyor';
         final gramaj = urun['gramaj'] ?? 'Bilinmiyor';
         final fiyat = urun['fiyat']?.toString() ?? 'Bilinmiyor';
@@ -137,7 +138,7 @@ class _BarkodOkuyucuState extends State<BarkodOkuyucu> {
                 Navigator.of(context).pop();
                 _sepeteEkle(urun);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${urun['ürün-adi']} sepete eklendi!')),
+                  SnackBar(content: Text('${urun['urunAdi']} sepete eklendi!')),
                 );
               },
               child: const Text('Sepete Ekle'),
@@ -168,7 +169,7 @@ class _BarkodOkuyucuState extends State<BarkodOkuyucu> {
     } else {
       sepet.add({...urun, 'adet': 1});
     }
-    logger.d('Sepete eklendi: ${urun['ürün-adi']}');
+    logger.d('Sepete eklendi: ${urun['urunAdi']}');
   }
 
   void _sifirlaBarkod() {
@@ -221,79 +222,79 @@ class _BarkodOkuyucuState extends State<BarkodOkuyucu> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
+        alignment: Alignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Text(
-              genelDuyuru,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.red
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            height: MediaQuery.of(context).size.height * 0.4,
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.teal, width: 2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            clipBehavior: Clip.hardEdge,
-            child: MobileScanner(
-              controller: _scannerController,
-              onDetect: (capture) {
-                if (_dialogAcikMi) return;
-                final List<Barcode> barcodes = capture.barcodes;
-                for (final barcode in barcodes) {
-                  final barkod = barcode.rawValue;
-                  if (barkod != null) {
-                    if (barkod != _sonOkunanBarkod) {
-                      logger.d('Barkod okundu: $barkod');
-                      setState(() {
-                        _barkodSonuc = barkod;
-                        _sonOkunanBarkod = barkod;
-                      });
-                      _urunBul(barkod);
+          Center(
+            child: SizedBox(
+              width: 300,
+              height: 300,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: MobileScanner(
+                  controller: _scannerController,
+                  onDetect: (capture) {
+                    if (_dialogAcikMi) return;
+                    final List<Barcode> barcodes = capture.barcodes;
+                    for (final barcode in barcodes) {
+                      final barkod = barcode.rawValue;
+                      if (barkod != null) {
+                        if (barkod != _sonOkunanBarkod) {
+                          logger.d('Barkod okundu: $barkod');
+                          setState(() {
+                            _barkodSonuc = barkod;
+                            _sonOkunanBarkod = barkod;
+                          });
+                          _urunBul(barkod);
+                        }
+                      } else {
+                        logger.d('Barkod okunamadı');
+                      }
                     }
-                  } else {
-                    logger.d('Barkod okunamadı');
-                  }
-                }
-              },
+                  },
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(8),
+          Align(
+            alignment: Alignment.center,
+            child: Lottie.asset(
+              'assets/animations/barcode_laser.json',
+              width: 300,
+              height: 300,
+              repeat: true,
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Son Okunan: $_barkodSonuc',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold
+          ),
+          Positioned(
+            top: 24,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[200]?.withValues(),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Son Okunan: $_barkodSonuc',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: _sifirlaBarkod,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Sıfırla'),
-                ),
-              ],
+                  TextButton.icon(
+                    onPressed: _sifirlaBarkod,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Sıfırla'),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

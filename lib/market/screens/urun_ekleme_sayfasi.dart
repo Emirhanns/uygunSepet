@@ -21,6 +21,10 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
   final TextEditingController _fiyatController = TextEditingController();
   final TextEditingController _indirimliFiyatController = TextEditingController();
   final TextEditingController _kampanyaController = TextEditingController();
+  final TextEditingController _stokAdediController = TextEditingController();
+  final TextEditingController _minimumStokController = TextEditingController();
+  final TextEditingController _kategoriController = TextEditingController();
+  bool _yukleniyor = false;
 
   @override
   void initState() {
@@ -41,12 +45,15 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
       if (doc.exists) {
         final data = doc.data()!;
         setState(() {
-          _urunAdiController.text = data['ürün-adi'] ?? '';
+          _urunAdiController.text = data['urunAdi'] ?? '';
           _markaController.text = data['marka'] ?? '';
           _gramajController.text = data['gramaj'] ?? '';
           _fiyatController.text = data['fiyat']?.toString() ?? '';
           _indirimliFiyatController.text = data['indirimliFiyat']?.toString() ?? '';
           _kampanyaController.text = data['kampanya'] ?? '';
+          _stokAdediController.text = data['stokMiktari']?.toString() ?? '0';
+          _minimumStokController.text = data['minimumStokMiktari']?.toString() ?? '0';
+          _kategoriController.text = data['kategori'] ?? '';
         });
       }
     } catch (e) {
@@ -62,10 +69,12 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
   Future<void> _urunKaydet() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _yukleniyor = true);
+
     try {
       final urunData = {
         'barkod': _barkodController.text,
-        'ürün-adi': _urunAdiController.text,
+        'urunAdi': _urunAdiController.text,
         'marka': _markaController.text,
         'gramaj': _gramajController.text,
         'fiyat': double.parse(_fiyatController.text),
@@ -73,6 +82,11 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
             ? double.parse(_indirimliFiyatController.text)
             : 0,
         'kampanya': _kampanyaController.text,
+        'status': 1,
+        'stokMiktari': int.parse(_stokAdediController.text),
+        'minimumStokMiktari': int.parse(_minimumStokController.text),
+        'kategori': _kategoriController.text,
+        'eklenmeTarihi': FieldValue.serverTimestamp(),
       };
 
       await FirebaseFirestore.instance
@@ -94,6 +108,8 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ürün kaydedilirken bir hata oluştu')),
       );
+    } finally {
+      setState(() => _yukleniyor = false);
     }
   }
 
@@ -101,7 +117,7 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ürün Ekle'),
+        title: Text(widget.barkod != null ? 'Ürün Düzenle' : 'Yeni Ürün Ekle'),
         backgroundColor: Colors.teal,
       ),
       body: SingleChildScrollView(
@@ -116,6 +132,7 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
                   labelText: 'Barkod',
                   border: OutlineInputBorder(),
                 ),
+                enabled: widget.barkod == null,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Lütfen barkod girin';
@@ -152,6 +169,20 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Lütfen marka girin';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _kategoriController,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen kategori girin';
                   }
                   return null;
                 },
@@ -214,16 +245,55 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _urunKaydet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _stokAdediController,
+                decoration: const InputDecoration(
+                  labelText: 'Stok Adedi',
+                  border: OutlineInputBorder(),
                 ),
-                child: const Text(
-                  'Kaydet',
-                  style: TextStyle(fontSize: 18),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen stok adedi girin';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Geçerli bir sayı girin';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _minimumStokController,
+                decoration: const InputDecoration(
+                  labelText: 'Minimum Stok Miktarı',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen minimum stok miktarı girin';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Geçerli bir sayı girin';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _yukleniyor ? null : _urunKaydet,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _yukleniyor
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(widget.barkod != null ? 'Güncelle' : 'Kaydet'),
                 ),
               ),
             ],
@@ -242,6 +312,9 @@ class _UrunEklemeSayfasiState extends State<UrunEklemeSayfasi> {
     _fiyatController.dispose();
     _indirimliFiyatController.dispose();
     _kampanyaController.dispose();
+    _stokAdediController.dispose();
+    _minimumStokController.dispose();
+    _kategoriController.dispose();
     super.dispose();
   }
 } 

@@ -3,6 +3,7 @@ import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'yetkili_panel.dart';
 
+
 class YetkiliGiris extends StatefulWidget {
   final String? barkod;
 

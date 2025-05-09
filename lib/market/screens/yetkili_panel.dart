@@ -3,6 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logger/logger.dart';
 import 'urun_ekleme_sayfasi.dart';
 import 'urun_listesi.dart';
+import 'kaldirilan_urunler_listesi.dart';
+import 'ikmal_gerektiren_urunler.dart';
+import 'satis_grafigi.dart';
+import 'siparisler_paneli.dart';
 
 class YetkiliPanel extends StatefulWidget {
   final String? barkod;
@@ -59,51 +63,121 @@ class _YetkiliPanelState extends State<YetkiliPanel> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.admin_panel_settings,
-              size: 100,
-              color: Colors.teal,
-            ),
-            const SizedBox(height: 32),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.add_shopping_cart, color: Colors.teal),
-                title: const Text('Yeni Ürün Ekle'),
-                subtitle: const Text('Sisteme yeni ürün eklemek için tıklayın'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UrunEklemeSayfasi(barkod: widget.barkod),
-                    ),
-                  );
-                },
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.admin_panel_settings,
+                size: 100,
+                color: Colors.teal,
               ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.edit, color: Colors.teal),
-                title: const Text('Ürünleri Düzenle'),
-                subtitle: const Text('Mevcut ürünleri düzenlemek için tıklayın'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const UrunListesi(),
-                    ),
-                  );
-                },
+              const SizedBox(height: 32),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.add_shopping_cart, color: Colors.teal),
+                  title: const Text('Yeni Ürün Ekle'),
+                  subtitle: const Text('Sisteme yeni ürün eklemek için tıklayın'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => UrunEklemeSayfasi(barkod: widget.barkod),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.edit, color: Colors.teal),
+                  title: const Text('Ürünleri Düzenle'),
+                  subtitle: const Text('Mevcut ürünleri düzenlemek için tıklayın'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const UrunListesi(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.teal),
+                  title: const Text('Kaldırılan Ürünler'),
+                  subtitle: const Text('Kaldırılan ürünleri görüntülemek için tıklayın'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const KaldirilanUrunlerListesi(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.warning_amber, color: Colors.teal),
+                  title: const Text('İkmal Gerektiren Ürünler'),
+                  subtitle: const Text('Stok miktarı azalan ürünleri görüntülemek için tıklayın'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const IkmalGerektirenUrunler(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.bar_chart, color: Colors.teal),
+                  title: const Text('Satış Grafiği'),
+                  subtitle: const Text('Satış istatistiklerini görüntülemek için tıklayın'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SatisGrafigi(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.receipt_long, color: Colors.teal),
+                  title: const Text('Siparişler'),
+                  subtitle: const Text('Verilen siparişleri görüntüle ve durumunu güncelle'),
+                  trailing: const Icon(Icons.arrow_forward_ios),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SiparislerPaneli(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

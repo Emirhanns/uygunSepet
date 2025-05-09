@@ -36,7 +36,7 @@ class Sepetsayfasistate extends State<SepetSayfasi> {
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     elevation: 4,
                     child: ListTile(
-                      title: Text(urun['ürün-adi']),
+                      title: Text(urun['urunAdi']),
                       subtitle: Text('Fiyat: ${urun['fiyat']} TL, Adet: ${urun['adet']}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

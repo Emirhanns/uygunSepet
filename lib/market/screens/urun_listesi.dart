@@ -14,13 +14,24 @@ class UrunListesi extends StatefulWidget {
 class _UrunListesiState extends State<UrunListesi> {
   final Logger logger = Logger();
   final TextEditingController _aramaController = TextEditingController();
-  String _aramaMetni = '';
   bool _yetkiliMi = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  bool _yukleniyor = true;
+  List<Map<String, dynamic>> _urunler = [];
+  
+  // Filtreleme değişkenleri
+  String _secilenMarka = '';
+  String _secilenKategori = '';
+  double? _minFiyat;
+  double? _maxFiyat;
+  List<String> _markalar = [];
+  List<String> _kategoriler = [];
 
   @override
   void initState() {
     super.initState();
     _yetkiliKontrol();
+    _urunleriGetir();
   }
 
   Future<void> _yetkiliKontrol() async {
@@ -38,127 +49,296 @@ class _UrunListesiState extends State<UrunListesi> {
     }
   }
 
+  Future<void> _urunleriGetir() async {
+    setState(() => _yukleniyor = true);
+    try {
+      final QuerySnapshot snapshot = await _firestore
+          .collection('urunler')
+          .where('status', isEqualTo: 1)
+          .get();
+
+      setState(() {
+        _urunler = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return {
+            'id': doc.id,
+            'urunAdi': data['urunAdi'] ?? 'İsimsiz Ürün',
+            'marka': data['marka'] ?? '',
+            'kategori': data['kategori'] ?? '',
+            'fiyat': (data['fiyat'] ?? 0.0).toDouble(),
+            'stokMiktari': data['stokMiktari'] ?? 0,
+            'minimumStokMiktari': data['minimumStokMiktari'] ?? 0,
+            'barkod': data['barkod'] ?? '',
+          };
+        }).toList();
+
+        // Marka ve kategorileri topla
+        _markalar = _urunler.map((e) => e['marka'] as String).toSet().toList()..sort();
+        _kategoriler = _urunler.map((e) => e['kategori'] as String).toSet().toList()..sort();
+        
+        _yukleniyor = false;
+      });
+    } catch (e) {
+      setState(() => _yukleniyor = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ürünler yüklenirken hata oluştu: $e')),
+      );
+    }
+  }
+
+  List<Map<String, dynamic>> _filtrelenmisUrunler() {
+    return _urunler.where((urun) {
+      bool markaUygun = _secilenMarka.isEmpty || urun['marka'] == _secilenMarka;
+      bool kategoriUygun = _secilenKategori.isEmpty || urun['kategori'] == _secilenKategori;
+      bool fiyatUygun = true;
+      
+      if (_minFiyat != null) {
+        fiyatUygun = fiyatUygun && urun['fiyat'] >= _minFiyat!;
+      }
+      if (_maxFiyat != null) {
+        fiyatUygun = fiyatUygun && urun['fiyat'] <= _maxFiyat!;
+      }
+
+      return markaUygun && kategoriUygun && fiyatUygun;
+    }).toList();
+  }
+
+  Future<void> _fiyatAraligiSec() async {
+    final TextEditingController minController = TextEditingController();
+    final TextEditingController maxController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fiyat Aralığı Seç'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: minController,
+              decoration: const InputDecoration(labelText: 'Minimum Fiyat'),
+              keyboardType: TextInputType.number,
+            ),
+            TextField(
+              controller: maxController,
+              decoration: const InputDecoration(labelText: 'Maksimum Fiyat'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _minFiyat = double.tryParse(minController.text);
+                _maxFiyat = double.tryParse(maxController.text);
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Uygula'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _minFiyat = null;
+                _maxFiyat = null;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Temizle'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _urunSil(String barkod) async {
+    try {
+      await _firestore.collection('urunler').doc(barkod).update({'status': 0});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ürün başarıyla kaldırıldı')),
+      );
+      _urunleriGetir();
+    } catch (e) {
+      logger.e('Ürün kaldırılırken hata: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ürün kaldırılırken bir hata oluştu')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filtreliUrunler = _filtrelenmisUrunler();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ürün Listesi'),
         backgroundColor: Colors.teal,
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _aramaController,
-              decoration: InputDecoration(
-                labelText: 'Ürün Ara',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                suffixIcon: _aramaMetni.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(() {
-                            _aramaController.clear();
-                            _aramaMetni = '';
-                          });
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                builder: (context) => Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Filtreleme Seçenekleri',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: _secilenMarka.isEmpty ? null : _secilenMarka,
+                        decoration: const InputDecoration(
+                          labelText: 'Marka',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Tümü'),
+                          ),
+                          ..._markalar.map((marka) => DropdownMenuItem(
+                                value: marka,
+                                child: Text(marka),
+                              )),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _secilenMarka = value ?? '');
                         },
-                      )
-                    : null,
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _aramaMetni = value;
-                });
-              },
-            ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: _secilenKategori.isEmpty ? null : _secilenKategori,
+                        decoration: const InputDecoration(
+                          labelText: 'Kategori',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Tümü'),
+                          ),
+                          ..._kategoriler.map((kategori) => DropdownMenuItem(
+                                value: kategori,
+                                child: Text(kategori),
+                              )),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _secilenKategori = value ?? '');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fiyatAraligiSec,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          _minFiyat != null || _maxFiyat != null
+                              ? 'Fiyat: ${_minFiyat?.toStringAsFixed(2) ?? "Min"} - ${_maxFiyat?.toStringAsFixed(2) ?? "Max"} TL'
+                              : 'Fiyat Aralığı Seç',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _secilenMarka = '';
+                                _secilenKategori = '';
+                                _minFiyat = null;
+                                _maxFiyat = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Filtreleri Temizle'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Uygula'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('urunler').snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Bir hata oluştu: ${snapshot.error}'),
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                var urunler = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final urunAdi = data['ürün-adi']?.toString().toLowerCase() ?? '';
-                  final marka = data['marka']?.toString().toLowerCase() ?? '';
-                  final barkod = data['barkod']?.toString().toLowerCase() ?? '';
-                  final aramaMetni = _aramaMetni.toLowerCase();
-
-                  return urunAdi.contains(aramaMetni) ||
-                      marka.contains(aramaMetni) ||
-                      barkod.contains(aramaMetni);
-                }).toList();
-
-                if (urunler.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'Ürün bulunamadı',
-                      style: TextStyle(fontSize: 18),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: urunler.length,
+        ],
+      ),
+      body: _yukleniyor
+          ? const Center(child: CircularProgressIndicator())
+          : filtreliUrunler.isEmpty
+              ? const Center(child: Text('Ürün bulunamadı'))
+              : ListView.builder(
+                  itemCount: filtreliUrunler.length,
                   itemBuilder: (context, index) {
-                    final urun = urunler[index].data() as Map<String, dynamic>;
-                    final indirimliFiyat = urun['indirimliFiyat']?.toString();
-                    final kampanya = urun['kampanya'];
-
+                    final urun = filtreliUrunler[index];
                     return Card(
                       margin: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                        horizontal: 16,
+                        vertical: 8,
                       ),
                       child: ListTile(
                         title: Text(
-                          urun['ürün-adi'] ?? 'İsimsiz Ürün',
+                          urun['urunAdi'] ?? 'İsimsiz Ürün',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Marka: ${urun['marka'] ?? 'Belirtilmemiş'}'),
-                            Text('Barkod: ${urun['barkod'] ?? 'Belirtilmemiş'}'),
-                            Text('Gramaj: ${urun['gramaj'] ?? 'Belirtilmemiş'}'),
-                            Text(
-                              'Fiyat: ${urun['fiyat']?.toString() ?? '0'} TL',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            if (indirimliFiyat != null && indirimliFiyat != '0')
-                              Text(
-                                'İndirimli Fiyat: $indirimliFiyat TL',
-                                style: TextStyle(
-                                  color: Colors.red[700],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            if (kampanya != null && kampanya.toString().isNotEmpty)
-                              Text(
-                                'Kampanya: $kampanya',
-                                style: const TextStyle(
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                            Text('Marka: ${urun['marka']}'),
+                            Text('Kategori: ${urun['kategori']}'),
+                            Text('Barkod: ${urun['barkod']}'),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '${urun['fiyat'].toStringAsFixed(2)} TL',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                                Text(
+                                  'Stok: ${urun['stokMiktari']}',
+                                  style: TextStyle(
+                                    color: urun['stokMiktari'] <= 10
+                                        ? Colors.red
+                                        : Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
                             IconButton(
                               icon: const Icon(Icons.edit),
                               onPressed: () {
@@ -169,7 +349,7 @@ class _UrunListesiState extends State<UrunListesi> {
                                       barkod: urun['barkod'],
                                     ),
                                   ),
-                                );
+                                ).then((_) => _urunleriGetir());
                               },
                             ),
                             IconButton(
@@ -184,39 +364,13 @@ class _UrunListesiState extends State<UrunListesi> {
                                     ),
                                     actions: [
                                       TextButton(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                        },
+                                        onPressed: () => Navigator.pop(context),
                                         child: const Text('İptal'),
                                       ),
                                       TextButton(
-                                        onPressed: () async {
-                                          final navigator = Navigator.of(context);
-                                          final messenger = ScaffoldMessenger.of(context);
-                                          try {
-                                            await FirebaseFirestore.instance
-                                                .collection('urunler')
-                                                .doc(urun['barkod'])
-                                                .delete();
-                                            if (!mounted) return;
-                                            navigator.pop();
-                                            messenger.showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Ürün başarıyla silindi'),
-                                              ),
-                                            );
-                                          } catch (e) {
-                                            logger.e(
-                                                'Ürün silinirken hata: $e');
-                                            if (!mounted) return;
-                                            navigator.pop();
-                                            messenger.showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                    'Ürün silinirken bir hata oluştu'),
-                                              ),
-                                            );
-                                          }
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _urunSil(urun['barkod']);
                                         },
                                         child: const Text('Sil'),
                                       ),
@@ -227,16 +381,10 @@ class _UrunListesiState extends State<UrunListesi> {
                             ),
                           ],
                         ),
-                        isThreeLine: true,
                       ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+                ),
     );
   }
 

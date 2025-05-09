@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:logger/logger.dart';
-import 'siparis_sayfasi.dart';
+import 'sepet_sayfasi.dart';
 
 class MusteriUrunListesi extends StatefulWidget {
   final List<Map<String, dynamic>> sepet;
@@ -30,22 +30,15 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
       });
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${urun['ürün-adi']} sepete eklendi!')),
+      SnackBar(content: Text('${urun['urunAdi']} sepete eklendi!')),
     );
   }
 
-  void _siparisVer() {
-    if (widget.sepet.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sepetiniz boş!')),
-      );
-      return;
-    }
-
+  void _sepeteGit() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SiparisSayfasi(sepet: widget.sepet),
+        builder: (context) => SepetSayfasi(sepet: widget.sepet),
       ),
     );
   }
@@ -62,7 +55,7 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
             children: [
               IconButton(
                 icon: const Icon(Icons.shopping_cart),
-                onPressed: _siparisVer,
+                onPressed: _sepeteGit,
               ),
               if (widget.sepet.isNotEmpty)
                 Positioned(
@@ -99,22 +92,11 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
             child: TextField(
               controller: _aramaController,
               decoration: InputDecoration(
-                labelText: 'Ürün Ara',
+                hintText: 'Ürün Ara...',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                suffixIcon: _aramaMetni.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(() {
-                            _aramaController.clear();
-                            _aramaMetni = '';
-                          });
-                        },
-                      )
-                    : null,
               ),
               onChanged: (value) {
                 setState(() {
@@ -123,59 +105,6 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
               },
             ),
           ),
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('urunler')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Center(child: Text('Bir hata oluştu'));
-              }
-
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              // Benzersiz markaları topla
-              final markalar = snapshot.data!.docs
-                  .map((doc) => (doc.data() as Map<String, dynamic>)['marka'] as String?)
-                  .where((marka) => marka != null)
-                  .toSet()
-                  .toList();
-
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                        label: const Text('Tümü'),
-                        selected: _secilenKategori == null,
-                        onSelected: (selected) {
-                          setState(() {
-                            _secilenKategori = null;
-                          });
-                        },
-                      ),
-                    ),
-                    ...markalar.map((marka) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                        label: Text(marka!),
-                        selected: _secilenKategori == marka,
-                        onSelected: (selected) {
-                          setState(() {
-                            _secilenKategori = selected ? marka : null;
-                          });
-                        },
-                      ),
-                    )),
-                  ],
-                ),
-              );
-            },
-          ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -183,6 +112,7 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
+                  logger.e('Firestore hatası: ${snapshot.error}');
                   return Center(
                     child: Text('Bir hata oluştu: ${snapshot.error}'),
                   );
@@ -192,9 +122,26 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  logger.w('Veritabanında hiç ürün bulunamadı');
+                  return const Center(
+                    child: Text(
+                      'Henüz ürün eklenmemiş',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  );
+                }
+
                 var urunler = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final urunAdi = data['ürün-adi']?.toString().toLowerCase() ?? '';
+                  logger.d('Ürün durumu: ${data['status']}, Ürün adı: ${data['urunAdi']}');
+                  
+                  // Sadece aktif ürünleri göster (status = 1 veya status null)
+                  if (data['status'] != null && data['status'] != 1) {
+                    return false;
+                  }
+
+                  final urunAdi = data['urunAdi']?.toString().toLowerCase() ?? '';
                   final marka = data['marka']?.toString().toLowerCase() ?? '';
                   final barkod = data['barkod']?.toString().toLowerCase() ?? '';
                   final aramaMetni = _aramaMetni.toLowerCase();
@@ -227,6 +174,20 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
                     final urun = urunler[index].data() as Map<String, dynamic>;
                     final indirimliFiyat = urun['indirimliFiyat']?.toString();
                     final kampanya = urun['kampanya'];
+                    
+                    // Stok miktarını doğru şekilde al
+                    int stokMiktari = 0;
+                    if (urun['stokMiktari'] != null) {
+                      if (urun['stokMiktari'] is int) {
+                        stokMiktari = urun['stokMiktari'] as int;
+                      } else if (urun['stokMiktari'] is double) {
+                        stokMiktari = (urun['stokMiktari'] as double).toInt();
+                      } else if (urun['stokMiktari'] is String) {
+                        stokMiktari = int.tryParse(urun['stokMiktari'] as String) ?? 0;
+                      }
+                    }
+                    
+                    logger.d('Ürün: ${urun['urunAdi']}, Stok Miktarı: $stokMiktari, Tip: ${urun['stokMiktari']?.runtimeType}');
 
                     return Card(
                       elevation: 4,
@@ -234,87 +195,100 @@ class _MusteriUrunListesiState extends State<MusteriUrunListesi> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Container(
-                              width: double.infinity,
-                              color: Colors.grey[200],
-                              child: const Center(
-                                child: Icon(
-                                  Icons.shopping_bag,
-                                  size: 50,
-                                  color: Colors.teal,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  urun['ürün-adi'] ?? 'İsimsiz Ürün',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  urun['marka'] ?? '',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                if (indirimliFiyat != null && indirimliFiyat != '0') ...[
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    '${urun['fiyat']} TL',
-                                    style: const TextStyle(
-                                      decoration: TextDecoration.lineThrough,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$indirimliFiyat TL',
-                                    style: TextStyle(
-                                      color: Colors.red[700],
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ] else
-                                  Text(
-                                    '${urun['fiyat']} TL',
+                                    urun['urunAdi'] ?? 'İsimsiz Ürün',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
-                                  ),
-                                if (kampanya != null && kampanya.toString().isNotEmpty)
-                                  Text(
-                                    kampanya.toString(),
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontSize: 12,
-                                    ),
-                                    maxLines: 1,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                              ],
+                                  Text(
+                                    urun['marka'] ?? '',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  if (indirimliFiyat != null && indirimliFiyat != '0') ...[
+                                    Text(
+                                      '${urun['fiyat']} TL',
+                                      style: const TextStyle(
+                                        decoration: TextDecoration.lineThrough,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$indirimliFiyat TL',
+                                      style: TextStyle(
+                                        color: Colors.red[700],
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ] else
+                                    Text(
+                                      '${urun['fiyat']} TL',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  if (kampanya != null && kampanya.toString().isNotEmpty)
+                                    Text(
+                                      kampanya.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.green,
+                                        fontSize: 12,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  Text(
+                                    'Stok: $stokMiktari',
+                                    style: TextStyle(
+                                      color: stokMiktari > 0 ? Colors.green : Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: SizedBox(
                               width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => _sepeteEkle(urun),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal,
-                                ),
-                                child: const Text('Sepete Ekle'),
-                              ),
+                              child: stokMiktari > 0
+                                  ? ElevatedButton(
+                                      onPressed: () => _sepeteEkle(urun),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.teal,
+                                      ),
+                                      child: const Text('Sepete Ekle'),
+                                    )
+                                  : Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[300],
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Center(
+                                        child: Text(
+                                          'Stok Kalmadı',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                             ),
                           ),
                         ],
